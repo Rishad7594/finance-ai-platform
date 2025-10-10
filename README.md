@@ -55,3 +55,21 @@ tests/
 docker/Dockerfile
 .env.example
 ```
+
+
+Steps:
+
+Open the file dashboard.html in your browser.
+(Simply double-click it, or right-click → “Open with Browser.”)
+
+Make sure your backend (uvicorn) is already running.
+
+You’ll now see a unified dashboard with:
+
+📰 News Sentiment Analysis — analyze custom or live news headlines.
+
+🚨 Anomaly Detection — check fraudulent transactions in real time.
+
+📈 Portfolio Rebalancing — simulate optimal weights based on risk target.
+
+📉 Stock Forecasting — get next 10-hour forecasts for any ticker (e.g., AAPL, GOOG, GOLD, BTC-USD).
