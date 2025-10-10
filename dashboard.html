@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Finance AI Platform Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    #forecastChart { max-height: 360px; }
+  </style>
+</head>
+<body class="container py-4">
+
+  <h2 class="mb-4">📊 Finance AI Platform Dashboard</h2>
+
+  <!-- Sentiment Section -->
+  <div class="card p-3 mb-4">
+    <h4>📰 News Sentiment Analysis</h4>
+    <textarea id="sentimentInput" class="form-control mb-2" rows="3"
+      placeholder='Enter one or more news headlines (one per line)'></textarea>
+    <button class="btn btn-success mb-2" onclick="analyzeSentiment()">Analyze Sentiment</button>
+    <button class="btn btn-info mb-2" onclick="fetchTodayNews()">Fetch Today’s News</button>
+    <div id="sentimentResult" class="mt-2"></div>
+  </div>
+
+  <!-- Anomaly Section -->
+  <div class="card p-3 mb-4">
+    <h4>🚨 Anomaly Detection (Fraud Check)</h4>
+    <input type="text" id="txnInput" class="form-control mb-2" placeholder="Transaction ID (optional)">
+    <input type="text" id="accountInput" class="form-control mb-2" placeholder="Account ID (e.g., 1001)">
+    <input type="number" id="amountInput" class="form-control mb-2" placeholder="Amount (e.g., 50000)">
+    <input type="number" id="hourInput" class="form-control mb-2" placeholder="Hour (0-23)">
+    <input type="text" id="merchantInput" class="form-control mb-2" placeholder="Merchant (e.g., Amazon)">
+    <input type="text" id="categoryInput" class="form-control mb-2" placeholder="Category (e.g., groceries)">
+    <input type="text" id="locationInput" class="form-control mb-2" placeholder="Location (e.g., Mumbai)">
+    <input type="text" id="deviceInput" class="form-control mb-2" placeholder="Device ID (e.g., dev1)">
+    <input type="text" id="channelInput" class="form-control mb-2" placeholder="Channel (e.g., card, upi, wire)">
+    <input type="text" id="currencyInput" class="form-control mb-2" placeholder="Currency (default INR)" value="INR">
+    <label for="thresholdSlider" class="form-label">Threshold: <span id="thresholdValue">0.8</span></label>
+    <input type="range" class="form-range mb-3" min="0" max="1" step="0.01" value="0.8" id="thresholdSlider" 
+           oninput="document.getElementById('thresholdValue').innerText = this.value">
+    <button class="btn btn-warning mb-2" onclick="checkAnomaly()">Check Anomaly</button>
+    <div id="anomalyResult" class="mt-2"></div>
+    <h5 class="mt-3">📜 Anomaly Check History</h5>
+    <table class="table table-bordered table-sm table-hover" id="anomalyHistory">
+      <thead class="table-light">
+        <tr>
+          <th>Txn</th><th>Account</th><th>Amount</th><th>Hour</th>
+          <th>Merchant</th><th>Category</th><th>Location</th><th>Device</th>
+          <th>Channel</th><th>Threshold</th><th>Score</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Rebalance Section -->
+  <div class="card p-3 mb-4">
+    <h4>📈 Portfolio Rebalancing</h4>
+    <input type="text" id="tickersInput" class="form-control mb-2"
+      placeholder='Enter tickers as comma separated (e.g., AAPL,MSFT,TSLA)'>
+    <input type="number" step="0.1" id="riskInput" class="form-control mb-2" placeholder="Target risk (0 to 1)">
+    <button class="btn btn-primary mb-2" onclick="rebalance()">Rebalance Portfolio</button>
+    <div id="rebalanceResult" class="mt-2"></div>
+  </div>
+
+  <!-- Forecast Section -->
+  <div class="card p-3 mb-4">
+    <h4>📉 Stock Price Forecasting (Next 10 Hours)</h4>
+    <input type="text" id="forecastTickersInput" class="form-control mb-2"
+      placeholder="Enter tickers (comma separated, e.g., AAPL,MSFT,TSLA)">
+    <button class="btn btn-dark mb-2" onclick="forecastStocks()">Forecast</button>
+    <canvas id="forecastChart" height="120"></canvas>
+    <div id="forecastTable" class="mt-3"></div>
+  </div>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+    let forecastChart = null;
+
+    async function analyzeSentiment() {
+      const inputText = document.getElementById("sentimentInput").value.trim();
+      if (!inputText) return alert("Please enter at least one headline.");
+      const texts = inputText.split("\n").map(t => t.trim());
+      const res = await axios.post(`${API_BASE}/sentiment`, { texts });
+      renderSentimentResults(texts, res.data.results);
+    }
+
+    async function fetchTodayNews() {
+      try {
+        const res = await axios.get(`${API_BASE}/news-today`);
+        const resultsDiv = document.getElementById("sentimentResult");
+        const newsHtml = res.data.news.map(n =>
+          `<p><b>"${n.headline}"</b><br>
+          Sentiment: <span class="${n.sentiment.label === 'POSITIVE' ? 'text-success' : 'text-danger'}">
+          ${n.sentiment.label}</span> (Score: ${(n.sentiment.score*100).toFixed(2)}%)</p>`
+        ).join("");
+        let summaryHtml = "<h5>📌 Stock-wise Summary</h5><ul>";
+        for (const [stock, stats] of Object.entries(res.data.summary || {})) {
+          const overall = stats.positive >= stats.negative ? "Positive 🚀" : "Negative 📉";
+          summaryHtml += `<li><b>${stock}</b>: ${stats.positive} Positive | ${stats.negative} Negative → ${overall}</li>`;
+        }
+        summaryHtml += "</ul>";
+        resultsDiv.innerHTML = newsHtml + summaryHtml;
+      } catch (err) {
+        alert("Error fetching today's news: " + err);
+      }
+    }
+
+    function renderSentimentResults(texts, results) {
+      const resultsDiv = document.getElementById("sentimentResult");
+      resultsDiv.innerHTML = results.map((r, i) =>
+        `<p><b>"${texts[i]}"</b><br>
+         Sentiment: <span class="${r.label === 'POSITIVE' ? 'text-success' : 'text-danger'}">${r.label}</span>
+         (Score: ${(r.score*100).toFixed(2)}%)</p>`
+      ).join("");
+    }
+
+    async function checkAnomaly() {
+      try {
+        const payload = {
+          txn_id: document.getElementById("txnInput").value || null,
+          account_id: document.getElementById("accountInput").value || null,
+          amount: parseFloat(document.getElementById("amountInput").value),
+          hour: parseInt(document.getElementById("hourInput").value),
+          merchant: document.getElementById("merchantInput").value || "UNKNOWN",
+          category: document.getElementById("categoryInput").value || "UNKNOWN",
+          location: document.getElementById("locationInput").value || "UNKNOWN",
+          device_id: document.getElementById("deviceInput").value || "UNKNOWN",
+          channel: document.getElementById("channelInput").value || "card",
+          currency: document.getElementById("currencyInput").value || "INR",
+          threshold: parseFloat(document.getElementById("thresholdSlider").value)
+        };
+        if (isNaN(payload.amount) || isNaN(payload.hour)) return alert("Please enter valid amount and hour.");
+        const res = await axios.post(`${API_BASE}/score`, payload);
+        const { score, status } = res.data;
+        document.getElementById("anomalyResult").innerHTML =
+          `<p>Anomaly Score: <b>${score.toFixed(4)}</b></p>
+           <p>Status: <span class="${status === 'Anomaly' ? 'text-danger fw-bold' : 'text-success fw-bold'}">
+             ${status === 'Anomaly' ? '🔴 Anomaly Detected' : '🟢 Normal'}</span></p>`;
+        const tbody = document.querySelector("#anomalyHistory tbody");
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${payload.txn_id || "-"}</td><td>${payload.account_id || "-"}</td><td>${payload.amount}</td>
+          <td>${payload.hour}</td><td>${payload.merchant}</td><td>${payload.category}</td>
+          <td>${payload.location}</td><td>${payload.device_id}</td><td>${payload.channel}</td>
+          <td>${payload.threshold}</td><td>${score.toFixed(4)}</td>
+          <td>${status === 'Anomaly' ? "🔴 Anomaly" : "🟢 Normal"}</td>
+        `;
+        tbody.appendChild(row);
+      } catch (err) {
+        alert("Error: " + err);
+      }
+    }
+
+    async function rebalance() {
+      try {
+        const tickers = document.getElementById("tickersInput").value.split(",").map(t => t.trim()).filter(t => t);
+        const risk_target = parseFloat(document.getElementById("riskInput").value);
+        if (tickers.length === 0 || isNaN(risk_target)) return alert("Please enter tickers and risk target.");
+        const res = await axios.post(`${API_BASE}/rebalance`, { tickers, risk_target });
+        document.getElementById("rebalanceResult").innerHTML =
+          `<pre>${JSON.stringify(res.data, null, 2)}</pre>`;
+      } catch (err) {
+        alert("Error: " + err);
+      }
+    }
+
+    // ---------- Forecast logic (robust timestamp alignment) ----------
+    function parseDateFlexible(s) {
+      // handle formats like "YYYY-MM-DD HH:MM" or "YYYY-MM-DDTHH:MM:SS" or "Aug 20, 2025 4:00:00 PM"
+      if (!s) return null;
+      // If string looks like "YYYY-MM-DD HH:MM" convert to "YYYY-MM-DDTHH:MM:00"
+      const isoLike = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/;
+      if (isoLike.test(s)) {
+        const withT = s.replace(' ', 'T');
+        if (withT.length === 16) return new Date(withT + ':00');
+        return new Date(withT);
+      }
+      // try Date constructor as a fallback (handles "Aug 20, 2025 4:00:00 PM")
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) return d;
+      // try adding seconds + T
+      const s2 = s.replace(' ', 'T') + ':00';
+      return new Date(s2);
+    }
+
+    function roundToMinuteKey(dateObj, minuteStep = 1) {
+      // returns epoch ms rounded down to the nearest minuteStep (e.g., 15)
+      const ms = dateObj.getTime();
+      const min = Math.floor(ms / 60000);
+      const roundedMin = Math.floor(min / minuteStep) * minuteStep;
+      return roundedMin * 60000;
+    }
+
+    async function forecastStocks() {
+      try {
+        const tickers = document.getElementById("forecastTickersInput").value
+          .split(",").map(t => t.trim()).filter(t => t);
+        if (tickers.length === 0) return alert("Please enter at least one ticker");
+
+        // small sentiment-based boost (optional)
+        let sentimentBoost = 0;
+        try {
+          const newsRes = await axios.get(`${API_BASE}/news-today`);
+          let pos = 0, neg = 0;
+          (newsRes.data.news || []).forEach(n => {
+            if (n.sentiment.label === "POSITIVE") pos++;
+            else if (n.sentiment.label === "NEGATIVE") neg++;
+          });
+          if (pos > neg) sentimentBoost = 0.015;
+          else if (neg > pos) sentimentBoost = -0.015;
+        } catch (e) {
+          sentimentBoost = 0;
+        }
+
+        const multi = {};
+        const allKeys = new Set();
+        const minuteStep = 15; // your backend uses 15-min intervals
+
+        // fetch each ticker individually (can be optimized to single call on backend)
+        for (const ticker of tickers) {
+          const res = await axios.get(`${API_BASE}/forecast/${ticker}`);
+          const history = res.data.history || [];
+          let forecast = res.data.forecast || [];
+
+          // apply sentiment bump
+          if (sentimentBoost !== 0) {
+            forecast = forecast.map(p => ({ ...p, price: Number((p.price * (1 + sentimentBoost)).toFixed(2)) }));
+          }
+
+          // build maps keyed by rounded epoch ms
+          const histMap = {};
+          for (const h of history) {
+            const d = parseDateFlexible(h.time);
+            if (!d || isNaN(d.getTime())) continue;
+            const key = roundToMinuteKey(d, minuteStep);
+            histMap[key] = Number(h.price);
+            allKeys.add(key);
+          }
+
+          const foreMap = {};
+          for (const f of forecast) {
+            const d = parseDateFlexible(f.time);
+            if (!d || isNaN(d.getTime())) continue;
+            const key = roundToMinuteKey(d, minuteStep);
+            foreMap[key] = Number(f.price);
+            allKeys.add(key);
+          }
+
+          multi[ticker.toUpperCase()] = { histMap, foreMap, rawHistory: history, rawForecast: forecast };
+        }
+
+        // sort all keys ascending
+        const keysArr = Array.from(allKeys).sort((a,b)=>a-b);
+        // convert to Date objects for Chart.js labels
+        const labelsDates = keysArr.map(k => new Date(k));
+
+        // build datasets aligned to labelsDates
+        const datasets = [];
+        const colorPool = ["#ff6384", "#36a2eb", "#cc65fe", "#ffce56", "#2ecc71", "#e74c3c", "#8e44ad", "#1abc9c"];
+        let colorIdx = 0;
+
+        for (const [ticker, maps] of Object.entries(multi)) {
+          const color = colorPool[colorIdx % colorPool.length];
+          colorIdx++;
+
+          const histArr = keysArr.map(k => (k in maps.histMap ? maps.histMap[k] : null));
+          const foreArr = keysArr.map(k => (k in maps.foreMap ? maps.foreMap[k] : null));
+
+          datasets.push({
+            label: `${ticker} History`,
+            data: histArr,
+            borderColor: color,
+            backgroundColor: color,
+            fill: false,
+            tension: 0.12,
+            pointRadius: 1.2,
+            spanGaps: false,
+            borderWidth: 2
+          });
+
+          datasets.push({
+            label: `${ticker} Forecast`,
+            data: foreArr,
+            borderColor: color,
+            backgroundColor: color,
+            borderDash: [6,6],
+            fill: false,
+            tension: 0,
+            pointRadius: 3,
+            spanGaps: false,
+            borderWidth: 2
+          });
+        }
+
+        // draw chart
+        const ctx = document.getElementById("forecastChart").getContext("2d");
+        if (forecastChart) forecastChart.destroy();
+        forecastChart = new Chart(ctx, {
+          type: "line",
+          data: { labels: labelsDates, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: {
+              legend: { position: "top", labels: { boxWidth: 14, padding: 8 } }
+            },
+            scales: {
+              x: {
+                type: "time",
+                time: { tooltipFormat: "PPpp", displayFormats: { hour: 'MMM d, h a', minute: 'HH:mm' } },
+                ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+              },
+              y: { title: { display: true, text: "Price (USD)" }, beginAtZero: false }
+            },
+            elements: { point: { hoverRadius: 6 } }
+          }
+        });
+
+        // recreate readable forecast tables (use rawForecast which has original time strings)
+        let tableHtml = "";
+        for (const [ticker, maps] of Object.entries(multi)) {
+          const rawForecast = maps.rawForecast || [];
+          tableHtml += `<h5 class="mt-3">${ticker} Forecast</h5>
+            <table class="table table-sm table-bordered">
+              <thead><tr><th>Time</th><th>Predicted Price</th></tr></thead>
+              <tbody>
+                ${rawForecast.map(f => `<tr><td>${f.time}</td><td>${Number(f.price).toFixed(2)}</td></tr>`).join("")}
+              </tbody>
+            </table>`;
+        }
+        document.getElementById("forecastTable").innerHTML = tableHtml;
+
+      } catch (err) {
+        console.error(err);
+        alert("Error fetching forecast: " + (err.response ? JSON.stringify(err.response.data) : err.message));
+      }
+    }
+
+  </script>
+</body>
+</html>

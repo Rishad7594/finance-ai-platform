@@ -1,0 +1,40 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# VSCode / IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+*.csv
+
+# System
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Cache
+.ipynb_checkpoints/
+
+# Environment files
+.env
+*.env
+
+# Node/npm (if used for UI)
+node_modules/
