@@ -1,8 +1,6 @@
 numpy
 pandas
 scikit-learn
-torch
-transformers
 fastapi
 uvicorn
 pydantic
@@ -11,3 +9,4 @@ statsmodels
 python-dotenv
 requests
 scipy
+vaderSentiment
