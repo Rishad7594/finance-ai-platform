@@ -10,6 +10,7 @@ Key fixes:
 - clearer logging & error messages
 """
 
+import os
 from datetime import datetime, timedelta
 import logging
 import numpy as np
