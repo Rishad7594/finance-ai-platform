@@ -23,8 +23,8 @@ if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(ch)
-
-API_BASE = "http://127.0.0.1:8000"  # change if your backend runs elsewhere
+PORT = os.getenv("PORT", "8000")
+API_BASE = f"http://127.0.0.1:{PORT}"
 
 # Map yfinance interval -> pandas freq used for resampling
 INTERVAL_TO_PANDAS = {
