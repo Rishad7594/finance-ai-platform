@@ -72,9 +72,14 @@ def _download_with_fallback(ticker: str, period: str, yf_intervals: list):
             if df is None or df.empty:
                 logger.warning("yfinance returned empty for %s %s %s", ticker, period, interval)
                 continue
+            # Flatten multi-level columns (yfinance >= 0.2.18 returns MultiIndex)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
             if "Close" not in df.columns or df["Close"].dropna().empty:
                 logger.warning("No Close values for %s with interval %s", ticker, interval)
                 continue
+            # Ensure Close is a 1D Series of floats
+            df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
             return df, interval
         except Exception as e:
             logger.warning("yfinance download failed for %s interval=%s: %s", ticker, interval, e)
