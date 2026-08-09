@@ -16,3 +16,6 @@ stable-baselines3
 gymnasium
 yfinance
 statsmodels
+python-dotenv
+requests
+scipy
