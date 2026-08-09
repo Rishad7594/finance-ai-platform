@@ -9,8 +9,13 @@ from transformers import pipeline
 
 class NewsSentiment:
     def __init__(self, model_name: str = "distilbert-base-uncased-finetuned-sst-2-english"):
-        # explicitly choose PyTorch backend
-        self.pipe = pipeline("sentiment-analysis", model=model_name, framework="pt")
+        self.model_name = model_name
+        self.pipe = None
+
+    def _load_model(self):
+        if self.pipe is None:
+            self.pipe = pipeline("sentiment-analysis", model=self.model_name, framework="pt")
 
     def infer(self, texts: List[str]) -> List[Dict]:
+        self._load_model()
         return self.pipe(texts)
