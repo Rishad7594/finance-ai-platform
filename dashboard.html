@@ -201,35 +201,15 @@
           .split(",").map(t => t.trim()).filter(t => t);
         if (tickers.length === 0) return alert("Please enter at least one ticker");
 
-        // small sentiment-based boost (optional)
-        let sentimentBoost = 0;
-        try {
-          const newsRes = await axios.get(`${API_BASE}/news-today`);
-          let pos = 0, neg = 0;
-          (newsRes.data.news || []).forEach(n => {
-            if (n.sentiment.label === "POSITIVE") pos++;
-            else if (n.sentiment.label === "NEGATIVE") neg++;
-          });
-          if (pos > neg) sentimentBoost = 0.015;
-          else if (neg > pos) sentimentBoost = -0.015;
-        } catch (e) {
-          sentimentBoost = 0;
-        }
-
         const multi = {};
         const allKeys = new Set();
-        const minuteStep = 15; // your backend uses 15-min intervals
+        const minuteStep = 30; // backend uses 30-min intervals
 
-        // fetch each ticker individually (can be optimized to single call on backend)
+        // fetch each ticker individually
         for (const ticker of tickers) {
           const res = await axios.get(`${API_BASE}/forecast/${ticker}`);
           const history = res.data.history || [];
-          let forecast = res.data.forecast || [];
-
-          // apply sentiment bump
-          if (sentimentBoost !== 0) {
-            forecast = forecast.map(p => ({ ...p, price: Number((p.price * (1 + sentimentBoost)).toFixed(2)) }));
-          }
+          const forecast = res.data.forecast || [];
 
           // build maps keyed by rounded epoch ms
           const histMap = {};
@@ -255,44 +235,61 @@
 
         // sort all keys ascending
         const keysArr = Array.from(allKeys).sort((a,b)=>a-b);
-        // convert to Date objects for Chart.js labels
         const labelsDates = keysArr.map(k => new Date(k));
 
-        // build datasets aligned to labelsDates
+        // Color pairs: [history color, forecast color]
+        const colorPairs = [
+          ["#ff6384", "#00e5ff"],  // pink history → cyan forecast
+          ["#36a2eb", "#ffce56"],  // blue history → yellow forecast
+          ["#cc65fe", "#2ecc71"],  // purple history → green forecast
+          ["#e74c3c", "#1abc9c"],  // red history → teal forecast
+        ];
+
         const datasets = [];
-        const colorPool = ["#ff6384", "#36a2eb", "#cc65fe", "#ffce56", "#2ecc71", "#e74c3c", "#8e44ad", "#1abc9c"];
-        let colorIdx = 0;
+        let pairIdx = 0;
 
         for (const [ticker, maps] of Object.entries(multi)) {
-          const color = colorPool[colorIdx % colorPool.length];
-          colorIdx++;
+          const [histColor, foreColor] = colorPairs[pairIdx % colorPairs.length];
+          pairIdx++;
+
+          // Find the last history key to bridge forecast to it
+          const histKeys = Object.keys(maps.histMap).map(Number).sort((a,b)=>a-b);
+          const lastHistKey = histKeys.length > 0 ? histKeys[histKeys.length - 1] : null;
+          const lastHistPrice = lastHistKey !== null ? maps.histMap[lastHistKey] : null;
 
           const histArr = keysArr.map(k => (k in maps.histMap ? maps.histMap[k] : null));
-          const foreArr = keysArr.map(k => (k in maps.foreMap ? maps.foreMap[k] : null));
+
+          // For forecast: include the last history point so the line connects
+          const foreArr = keysArr.map(k => {
+            if (k in maps.foreMap) return maps.foreMap[k];
+            // Bridge: if this is the last history key, include its price in forecast too
+            if (lastHistKey !== null && k === lastHistKey) return lastHistPrice;
+            return null;
+          });
 
           datasets.push({
             label: `${ticker} History`,
             data: histArr,
-            borderColor: color,
-            backgroundColor: color,
+            borderColor: histColor,
+            backgroundColor: histColor,
             fill: false,
-            tension: 0.12,
-            pointRadius: 1.2,
+            tension: 0.15,
+            pointRadius: 1,
             spanGaps: false,
-            borderWidth: 2
+            borderWidth: 2.5
           });
 
           datasets.push({
             label: `${ticker} Forecast`,
             data: foreArr,
-            borderColor: color,
-            backgroundColor: color,
-            borderDash: [6,6],
+            borderColor: foreColor,
+            backgroundColor: foreColor,
+            borderDash: [8, 4],
             fill: false,
-            tension: 0,
-            pointRadius: 3,
+            tension: 0.25,
+            pointRadius: 2.5,
             spanGaps: false,
-            borderWidth: 2
+            borderWidth: 2.5
           });
         }
 
@@ -321,7 +318,7 @@
           }
         });
 
-        // recreate readable forecast tables (use rawForecast which has original time strings)
+        // recreate readable forecast tables
         let tableHtml = "";
         for (const [ticker, maps] of Object.entries(multi)) {
           const rawForecast = maps.rawForecast || [];
@@ -340,6 +337,7 @@
         alert("Error fetching forecast: " + (err.response ? JSON.stringify(err.response.data) : err.message));
       }
     }
+
 
   </script>
 </body>

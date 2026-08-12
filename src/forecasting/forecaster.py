@@ -1,13 +1,11 @@
 # src/forecasting/forecaster.py
 """
-Robust intraday forecaster (resampling + safe ARIMA fallbacks).
+Intraday stock price forecaster using multi-signal ensemble:
+  - EWMA momentum (trend continuation)
+  - Mean-reversion anchor (prevents runaway predictions)
+  - Volatility-scaled random walk (realistic noise)
 
-Key fixes:
-- use yfinance intervals like "15m" (Yahoo format)
-- resample feed to regular pandas freq (e.g., "15min") so statsmodels won't complain
-- if pmdarima isn't usable due to binary incompatibility, fallback to statsmodels.ARIMA using `.values`
-- return history timestamps from the feed (so charts show today's date)
-- clearer logging & error messages
+No heavy ML libraries — uses only numpy/pandas math.
 """
 
 import os
@@ -24,6 +22,7 @@ if not logger.handlers:
     ch = logging.StreamHandler()
     ch.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     logger.addHandler(ch)
+
 PORT = os.getenv("PORT", "8000")
 API_BASE = f"http://127.0.0.1:{PORT}"
 
@@ -87,89 +86,114 @@ def _download_with_fallback(ticker: str, period: str, yf_intervals: list):
     return None, None
 
 
-def forecast_intraday(ticker: str, steps: int = 40, lookback_days: int = 5, preferred_interval: str = "15m"):
+def _ensemble_forecast(ts: pd.Series, steps: int) -> np.ndarray:
     """
-    Forecast next `steps` periods (default 40 -> 10 hours at 15min).
-    Returns (forecast_list, history_list) where each list element is {"time": "YYYY-MM-DD HH:MM", "price": float}.
+    Multi-signal ensemble forecast:
+      60% EWMA momentum  — captures recent trend direction
+      20% mean-reversion  — anchors toward rolling average
+      20% volatility walk  — adds realistic jitter
+
+    Returns numpy array of `steps` predicted prices.
+    """
+    values = ts.values.astype(float)
+    n = len(values)
+
+    # --- Signal 1: EWMA Momentum (60%) ---
+    # Compute EMA with span = min(20, half of data)
+    ema_span = min(20, max(5, n // 2))
+    ema = pd.Series(values).ewm(span=ema_span, adjust=False).mean().values
+
+    # Slope: average of last 5 EMA differences (direction + magnitude)
+    slope_window = min(5, len(ema) - 1)
+    ema_diffs = np.diff(ema[-slope_window - 1:])
+    avg_slope = float(np.mean(ema_diffs))
+
+    # Decay the slope slightly over time (momentum fades)
+    decay = 0.97
+    momentum_forecast = np.zeros(steps)
+    last_price = float(values[-1])
+    for i in range(steps):
+        last_price += avg_slope * (decay ** i)
+        momentum_forecast[i] = last_price
+
+    # --- Signal 2: Mean-Reversion Anchor (20%) ---
+    # Pull toward rolling mean of last 60 candles
+    rolling_window = min(60, n)
+    rolling_mean = float(np.mean(values[-rolling_window:]))
+    reversion_strength = 0.03  # 3% pull per step toward mean
+
+    reversion_forecast = np.zeros(steps)
+    rev_price = float(values[-1])
+    for i in range(steps):
+        rev_price += (rolling_mean - rev_price) * reversion_strength
+        reversion_forecast[i] = rev_price
+
+    # --- Signal 3: Volatility-Scaled Random Walk (20%) ---
+    # Use actual candle-to-candle returns volatility
+    returns = np.diff(values[-rolling_window:]) / values[-rolling_window:-1]
+    returns = returns[np.isfinite(returns)]
+    vol = float(np.std(returns)) if len(returns) > 1 else 0.001
+
+    walk_forecast = np.zeros(steps)
+    walk_price = float(values[-1])
+    np.random.seed(int(datetime.now().timestamp()) % 2**31)
+    for i in range(steps):
+        # Random return drawn from actual volatility distribution
+        random_return = np.random.normal(0, vol)
+        walk_price *= (1 + random_return)
+        walk_forecast[i] = walk_price
+
+    # --- Blend: 60% momentum + 20% reversion + 20% walk ---
+    ensemble = (0.60 * momentum_forecast +
+                0.20 * reversion_forecast +
+                0.20 * walk_forecast)
+
+    return ensemble
+
+
+def forecast_intraday(ticker: str, steps: int = 20, lookback_days: int = 30, preferred_interval: str = "30m"):
+    """
+    Forecast next `steps` periods (default 20 x 30min = 10 hours).
+    Returns (forecast_list, history_list) where each element is {"time": "YYYY-MM-DD HH:MM", "price": float}.
     """
     if steps <= 0:
         raise ValueError("steps must be > 0")
 
-    # build candidate intervals (preferred first)
-    candidates = [preferred_interval, "30m", "60m", "90m", "1h"]
+    # Build candidate intervals (preferred first)
+    candidates = [preferred_interval, "15m", "60m", "90m", "1h"]
     candidates = [c for c in candidates if c in INTERVAL_TO_PANDAS]
 
     df, used_interval = _download_with_fallback(ticker, f"{lookback_days}d", candidates)
     if df is None:
         raise RuntimeError(f"No intraday data found for {ticker} with intervals {candidates}")
 
-    # use Close series and resample to regular frequency (pandas)
-    pd_freq = INTERVAL_TO_PANDAS.get(used_interval, "15min")
+    # Use Close series and resample to regular frequency
+    pd_freq = INTERVAL_TO_PANDAS.get(used_interval, "30min")
     logger.info("Using interval=%s -> pandas freq=%s", used_interval, pd_freq)
 
-    # ensure datetime index has no duplicate / is sorted
+    # Ensure datetime index is sorted, no duplicates
     df = df.sort_index()
-    # if tz-aware, convert to naive to simplify formatting (keeps wall-clock time)
     try:
         if getattr(df.index, "tz", None) is not None:
             df.index = df.index.tz_convert(None)
     except Exception:
-        # some indexes don't support tz_convert; ignore
         pass
 
-    # resample to fixed frequency and forward-fill any gaps
+    # Resample to fixed frequency and forward-fill gaps
     try:
-        if pd_freq == "1d":
-            ts = df["Close"].resample(pd_freq).last().ffill()
-        else:
-            ts = df["Close"].resample(pd_freq).last().ffill()
+        ts = df["Close"].resample(pd_freq).last().ffill()
     except Exception:
-        # fallback: use raw Close values without resampling
         logger.warning("Resampling failed, falling back to raw Close series")
         ts = df["Close"].dropna()
 
     if ts.empty:
         raise RuntimeError(f"No close-price data available for {ticker} after resampling")
 
-    # limit training size to recent 120 points for lightning fast response (<0.1s)
-    ts_train = ts[-120:] if len(ts) > 120 else ts
+    # Use up to 200 data points for training (more context = better trend)
+    ts_train = ts[-200:] if len(ts) > 200 else ts
 
-    # Forecast values holder
-    forecast_values = None
-
-    # Fast direct ARIMA fitting using statsmodels
-    try:
-        from statsmodels.tsa.arima.model import ARIMA
-        model = ARIMA(ts_train.values, order=(1, 1, 1))
-        fitted = model.fit()
-        forecast_values = np.asarray(fitted.forecast(steps=steps))
-    except Exception as e:
-        logger.warning("Direct ARIMA failed (%s); trying pmdarima fallback", e)
-        try:
-            from pmdarima import auto_arima
-            model = auto_arima(
-                ts_train,
-                seasonal=False,
-                stepwise=True,
-                suppress_warnings=True,
-                error_action="ignore",
-                max_order=3,
-            )
-            forecast_values = np.asarray(model.predict(n_periods=steps))
-        except Exception as e2:
-            logger.exception("ARIMA fallback failed: %s", e2)
-            # Final fallback: simple linear trend + random walk if ARIMA unavailable
-            last_price = float(ts_train.values[-1])
-            trend = (last_price - float(ts_train.values[0])) / len(ts_train)
-            forecast_values = np.array([last_price + trend * i for i in range(1, steps + 1)])
-
-    # Add small realistic noise proportional to recent volatility
-    try:
-        vol = float(np.nanstd(ts_train.values))
-        noise = np.random.normal(0, vol * 0.002, size=len(forecast_values))
-        forecast_values = forecast_values + noise
-    except Exception:
-        pass
+    # --- Run multi-signal ensemble forecast ---
+    forecast_values = _ensemble_forecast(ts_train, steps)
 
     # Optional sentiment adjustment
     try:
@@ -180,7 +204,7 @@ def forecast_intraday(ticker: str, steps: int = 40, lookback_days: int = 5, pref
     except Exception:
         pass
 
-    # Prepare history times using actual index values (so chart shows today's timestamps)
+    # Prepare history: last 100 points with actual timestamps
     last_n = min(100, len(ts))
     hist_index = ts.index[-last_n:]
     history = [
@@ -188,7 +212,7 @@ def forecast_intraday(ticker: str, steps: int = 40, lookback_days: int = 5, pref
         for t, p in zip(hist_index, ts.values[-last_n:])
     ]
 
-    # Build forecast timestamps starting after last history timestamp
+    # Build forecast timestamps starting after last history point
     last_time = hist_index[-1]
     forecast_times = []
     if pd_freq.endswith("min"):
@@ -203,9 +227,8 @@ def forecast_intraday(ticker: str, steps: int = 40, lookback_days: int = 5, pref
         for i in range(1, len(forecast_values) + 1):
             forecast_times.append(last_time + timedelta(days=i))
     else:
-        # default 15 minutes
         for i in range(1, len(forecast_values) + 1):
-            forecast_times.append(last_time + timedelta(minutes=15 * i))
+            forecast_times.append(last_time + timedelta(minutes=30 * i))
 
     forecast = [
         {"time": pd.Timestamp(t).strftime("%Y-%m-%d %H:%M"), "price": float(round(float(p), 2))}
@@ -215,7 +238,7 @@ def forecast_intraday(ticker: str, steps: int = 40, lookback_days: int = 5, pref
     return forecast, history
 
 
-def forecast_multi(tickers, steps: int = 40, lookback_days: int = 5, preferred_interval: str = "15m"):
+def forecast_multi(tickers, steps: int = 20, lookback_days: int = 30, preferred_interval: str = "30m"):
     out = {}
     for tk in tickers:
         try:
@@ -230,8 +253,8 @@ def forecast_multi(tickers, steps: int = 40, lookback_days: int = 5, preferred_i
 if __name__ == "__main__":
     # quick local smoke test
     try:
-        preds, hist = forecast_intraday("AAPL", steps=16, lookback_days=3)
-        print("History sample:", hist[-3:])
-        print("Forecast sample:", preds[:5])
+        preds, hist = forecast_intraday("AAPL", steps=20, lookback_days=30)
+        print("History sample (last 3):", hist[-3:])
+        print("Forecast sample (first 5):", preds[:5])
     except Exception as ex:
         print("Local forecast test failed:", ex)
