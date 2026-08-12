@@ -189,6 +189,25 @@ def forecast_intraday(ticker: str, steps: int = 20, lookback_days: int = 30, pre
     if ts.empty:
         raise RuntimeError(f"No close-price data available for {ticker} after resampling")
 
+    # --- Filter to regular US market hours only (9:30 AM - 4:00 PM ET) ---
+    # yfinance returns timestamps in ET for US stocks
+    # This ensures our data matches what Yahoo Finance / Google Finance show
+    if pd_freq != "1d":
+        market_mask = []
+        for t in ts.index:
+            hour = t.hour
+            minute = t.minute
+            time_minutes = hour * 60 + minute  # minutes since midnight
+            # Market open: 9:30 (570 min) to 16:00 (960 min)
+            market_mask.append(570 <= time_minutes < 960)
+        ts_filtered = ts[market_mask]
+        if len(ts_filtered) >= 20:  # only use filtered if we have enough data
+            ts = ts_filtered
+            logger.info("Filtered to market hours: %d candles", len(ts))
+
+    if ts.empty:
+        raise RuntimeError(f"No close-price data available for {ticker} after market hours filter")
+
     # Use up to 200 data points for training (more context = better trend)
     ts_train = ts[-200:] if len(ts) > 200 else ts
 
@@ -212,23 +231,30 @@ def forecast_intraday(ticker: str, steps: int = 20, lookback_days: int = 30, pre
         for t, p in zip(hist_index, ts.values[-last_n:])
     ]
 
-    # Build forecast timestamps starting after last history point
+    # Build forecast timestamps — only within market hours (9:30-16:00 ET)
     last_time = hist_index[-1]
-    forecast_times = []
     if pd_freq.endswith("min"):
-        minutes = int(pd_freq.replace("min", ""))
-        for i in range(1, len(forecast_values) + 1):
-            forecast_times.append(last_time + timedelta(minutes=minutes * i))
+        step_minutes = int(pd_freq.replace("min", ""))
     elif pd_freq.endswith("h"):
-        hours = int(pd_freq.replace("h", ""))
-        for i in range(1, len(forecast_values) + 1):
-            forecast_times.append(last_time + timedelta(hours=hours * i))
-    elif pd_freq == "1d":
-        for i in range(1, len(forecast_values) + 1):
-            forecast_times.append(last_time + timedelta(days=i))
+        step_minutes = int(pd_freq.replace("h", "")) * 60
     else:
-        for i in range(1, len(forecast_values) + 1):
-            forecast_times.append(last_time + timedelta(minutes=30 * i))
+        step_minutes = 30
+
+    forecast_times = []
+    current_time = last_time
+    while len(forecast_times) < len(forecast_values):
+        current_time += timedelta(minutes=step_minutes)
+        time_minutes = current_time.hour * 60 + current_time.minute
+        # Skip non-market hours: jump to next day 9:30 AM
+        if pd_freq != "1d" and (time_minutes >= 960 or time_minutes < 570):
+            # Jump to next trading day 9:30 AM
+            next_day = current_time.date() + timedelta(days=1)
+            # Skip weekends
+            while next_day.weekday() >= 5:  # 5=Sat, 6=Sun
+                next_day += timedelta(days=1)
+            current_time = datetime.combine(next_day, datetime.min.time().replace(hour=9, minute=30))
+            time_minutes = 570
+        forecast_times.append(current_time)
 
     forecast = [
         {"time": pd.Timestamp(t).strftime("%Y-%m-%d %H:%M"), "price": float(round(float(p), 2))}
