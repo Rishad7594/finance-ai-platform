@@ -1,32 +1,32 @@
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder, FunctionTransformer, StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
 
 class SimpleAnomalyDetector:
-    def __init__(self, random_state: int = 42, contamination: float = 0.02):
-        # Features from your transactions.csv
+    def __init__(self, random_state: int = 42, contamination: float = 0.05):
+        # Features from your transactions
         self.numeric_features = ["amount", "hour"]
         self.categorical_features = ["merchant", "category", "channel", "currency", "account_id"]
 
         # === Preprocessing ===
         numeric_transformer = Pipeline(steps=[
-            ("log", FunctionTransformer(np.log1p, validate=False)),  # reduce skew
+            ("log", FunctionTransformer(np.log1p, validate=False)),
             ("scale", StandardScaler())
         ])
 
         try:
             categorical_transformer = OneHotEncoder(
                 handle_unknown="ignore",
-                sparse_output=False  # ✅ sklearn >=1.2
+                sparse_output=False
             )
         except TypeError:
             categorical_transformer = OneHotEncoder(
                 handle_unknown="ignore",
-                sparse=False  # ✅ fallback sklearn <1.2
+                sparse=False
             )
 
         self.preprocessor = ColumnTransformer(
@@ -38,7 +38,7 @@ class SimpleAnomalyDetector:
 
         # === Model ===
         self.model = IsolationForest(
-            n_estimators=300,
+            n_estimators=200,
             contamination=contamination,
             random_state=random_state
         )
@@ -49,8 +49,6 @@ class SimpleAnomalyDetector:
             ("model", self.model)
         ])
 
-        # === Score scaler ===
-        self.scaler = MinMaxScaler(feature_range=(0, 1))
         self.fitted = False
 
     def _ensure_columns(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -70,43 +68,83 @@ class SimpleAnomalyDetector:
 
         # Fit pipeline
         self.pipeline.fit(X)
-
-        # Normalize decision function scores
-        pre_X = self.pipeline.named_steps["preprocess"].transform(X)
-        raw_scores = -self.pipeline.named_steps["model"].decision_function(pre_X).reshape(-1, 1)
-        self.scaler.fit(raw_scores)
-
         self.fitted = True
         return self
 
     def score(self, record: dict) -> dict:
-        """Compute normalized anomaly score for a single transaction [0,1]."""
-        if not self.fitted:
-            amt = float(record.get("amount", 0))
-            hour = int(record.get("hour", 12))
-            is_anomaly = (amt > 50000) or (amt < 1) or (hour < 5)
-            return {"score": 1.0 if is_anomaly else 0.0, "anomaly": bool(is_anomaly)}
+        """
+        Compute robust normalized anomaly score [0.0, 1.0] combining
+        IsolationForest ML decision function + domain fraud heuristics.
+        """
+        amt = float(record.get("amount", 0))
+        hour = int(record.get("hour", 12))
+        merchant = str(record.get("merchant", "")).lower()
+        category = str(record.get("category", "")).lower()
+        channel = str(record.get("channel", "")).lower()
+        location = str(record.get("location", "")).lower()
 
-        df = pd.DataFrame([{
-            "amount": float(record.get("amount", 0)),
-            "hour": int(record.get("hour", 12)),
-            "merchant": record.get("merchant", "UNKNOWN"),
-            "category": record.get("category", "UNKNOWN"),
-            "channel": record.get("channel", "UNKNOWN"),
-            "currency": record.get("currency", "UNKNOWN"),
-            "account_id": record.get("account_id", "UNKNOWN"),
-        }])
+        # --- Rule-Based Fraud Heuristics ---
+        h_score = 0.05
 
-        df = self._ensure_columns(df)
-        X = df[self.numeric_features + self.categorical_features]
+        # 1. High Amount Risk
+        if amt >= 200000:
+            h_score += 0.55
+        elif amt >= 50000:
+            h_score += 0.35
+        elif amt < 1:
+            h_score += 0.20
 
-        pre_X = self.pipeline.named_steps["preprocess"].transform(X)
-        raw_score = -self.pipeline.named_steps["model"].decision_function(pre_X)[0]
-        norm_score = float(self.scaler.transform([[raw_score]])[0][0])
+        # 2. Late Night Hours (1 AM - 5 AM)
+        if 1 <= hour <= 5:
+            h_score += 0.30
 
-        return {"score": norm_score}
+        # 3. High Risk Channel
+        if channel in ["wire", "crypto"]:
+            h_score += 0.25
 
-    def predict(self, record: dict, threshold: float = 0.5) -> dict:
+        # 4. High Risk Category / Merchant Keywords
+        if any(k in category for k in ["luxury", "jewelry", "crypto", "wire"]):
+            h_score += 0.25
+        if any(k in merchant for k in ["jewelry", "paris", "crypto", "unknown"]):
+            h_score += 0.20
+
+        # 5. Overseas / Unknown Location
+        if any(k in location for k in ["overseas", "unknown", "foreign"]):
+            h_score += 0.20
+
+        # Clamp heuristic score
+        h_score = min(1.0, h_score)
+
+        # --- ML Score (Isolation Forest) ---
+        ml_score = 0.5
+        if self.fitted:
+            try:
+                df = pd.DataFrame([{
+                    "amount": amt,
+                    "hour": hour,
+                    "merchant": record.get("merchant", "UNKNOWN"),
+                    "category": record.get("category", "UNKNOWN"),
+                    "channel": record.get("channel", "UNKNOWN"),
+                    "currency": record.get("currency", "INR"),
+                    "account_id": record.get("account_id", "1001"),
+                }])
+                df = self._ensure_columns(df)
+                X = df[self.numeric_features + self.categorical_features]
+                pre_X = self.pipeline.named_steps["preprocess"].transform(X)
+                df_val = float(self.pipeline.named_steps["model"].decision_function(pre_X)[0])
+                # Lower decision_function means more anomalous
+                ml_score = 0.5 - (df_val * 3.0)
+                ml_score = min(1.0, max(0.0, ml_score))
+            except Exception:
+                ml_score = h_score
+
+        # Combine ML (30%) + Domain Rules (70%)
+        final_score = (0.3 * ml_score) + (0.7 * h_score)
+        final_score = float(np.clip(final_score, 0.05, 0.99))
+
+        return {"score": round(final_score, 4)}
+
+    def predict(self, record: dict, threshold: float = 0.70) -> dict:
         """Predict anomaly/normal label for a record using score + threshold."""
         result = self.score(record)
         score = result["score"]

@@ -2,80 +2,472 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Finance AI Platform Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finance AI Platform | Intelligent Financial Dashboard</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+  
+  <!-- External JS Libs -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
   <style>
-    #forecastChart { max-height: 360px; }
+    :root {
+      --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --bg-app: #f8fafc;
+      --card-bg: #ffffff;
+      --border-color: #e2e8f0;
+      --border-color-hover: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --primary-accent: #4f46e5;
+      --primary-hover: #4338ca;
+      --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.05);
+      --shadow-md: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 8px 10px -6px rgba(15, 23, 42, 0.04);
+      --shadow-lg: 0 20px 30px -10px rgba(15, 23, 42, 0.07);
+    }
+
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-app);
+      color: var(--text-main);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Navbar */
+    .app-header {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Glass / Light Cards */
+    .dashboard-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: var(--shadow-md);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      margin-bottom: 24px;
+    }
+
+    .dashboard-card:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    .card-icon-wrapper {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      margin-right: 12px;
+    }
+
+    .icon-news { background: #eff6ff; color: #2563eb; }
+    .icon-anomaly { background: #fff1f2; color: #e11d48; }
+    .icon-rebalance { background: #f0fdf4; color: #16a34a; }
+    .icon-forecast { background: #faf5ff; color: #9333ea; }
+
+    /* Form Controls */
+    .form-control, .form-select {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 0.925rem;
+      color: var(--text-main);
+      background-color: #f8fafc;
+      transition: all 0.2s ease;
+    }
+
+    .form-control:focus, .form-select:focus {
+      background-color: #ffffff;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Buttons */
+    .btn-custom-primary {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    }
+
+    .btn-custom-primary:hover {
+      background: linear-gradient(135deg, #4338ca 0%, #4f46e5 100%);
+      color: #ffffff;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35);
+    }
+
+    .btn-custom-secondary {
+      background: #ffffff;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-custom-secondary:hover {
+      background: #f1f5f9;
+      border-color: var(--border-color-hover);
+    }
+
+    /* Status Pills & Badges */
+    .badge-positive {
+      background-color: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .badge-negative {
+      background-color: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    /* Tables */
+    .table-custom {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .table-custom th {
+      background-color: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .table-custom td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.9rem;
+    }
+
+    .table-custom tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Chart Container */
+    .chart-container-wrapper {
+      position: relative;
+      background: #ffffff;
+      border: 1px solid #f1f5f9;
+      border-radius: 12px;
+      padding: 16px;
+      height: 380px;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   </style>
 </head>
-<body class="container py-4">
+<body>
 
-  <h2 class="mb-4">📊 Finance AI Platform Dashboard</h2>
+  <!-- Header -->
+  <header class="app-header py-3 mb-4">
+    <div class="container d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-3">
+        <div class="bg-primary text-white p-2 rounded-3 d-flex align-items-center justify-content-center" style="width:40px; height:40px;">
+          <i class="bi bi-cpu-fill fs-5"></i>
+        </div>
+        <div>
+          <h5 class="mb-0 fw-bold">Finance AI Platform</h5>
+          <small class="text-muted">Autonomous Risk & Market Intelligence Engine</small>
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge-positive d-inline-flex align-items-center gap-1">
+          <span class="spinner-grow spinner-grow-sm text-success" role="status" style="width: 6px; height: 6px;"></span>
+          System Live
+        </span>
+      </div>
+    </div>
+  </header>
 
-  <!-- Sentiment Section -->
-  <div class="card p-3 mb-4">
-    <h4>📰 News Sentiment Analysis</h4>
-    <textarea id="sentimentInput" class="form-control mb-2" rows="3"
-      placeholder='Enter one or more news headlines (one per line)'></textarea>
-    <button class="btn btn-success mb-2" onclick="analyzeSentiment()">Analyze Sentiment</button>
-    <button class="btn btn-info mb-2" onclick="fetchTodayNews()">Fetch Today’s News</button>
-    <div id="sentimentResult" class="mt-2"></div>
-  </div>
+  <main class="container pb-5">
 
-  <!-- Anomaly Section -->
-  <div class="card p-3 mb-4">
-    <h4>🚨 Anomaly Detection (Fraud Check)</h4>
-    <input type="text" id="txnInput" class="form-control mb-2" placeholder="Transaction ID (optional)">
-    <input type="text" id="accountInput" class="form-control mb-2" placeholder="Account ID (e.g., 1001)">
-    <input type="number" id="amountInput" class="form-control mb-2" placeholder="Amount (e.g., 50000)">
-    <input type="number" id="hourInput" class="form-control mb-2" placeholder="Hour (0-23)">
-    <input type="text" id="merchantInput" class="form-control mb-2" placeholder="Merchant (e.g., Amazon)">
-    <input type="text" id="categoryInput" class="form-control mb-2" placeholder="Category (e.g., groceries)">
-    <input type="text" id="locationInput" class="form-control mb-2" placeholder="Location (e.g., Mumbai)">
-    <input type="text" id="deviceInput" class="form-control mb-2" placeholder="Device ID (e.g., dev1)">
-    <input type="text" id="channelInput" class="form-control mb-2" placeholder="Channel (e.g., card, upi, wire)">
-    <input type="text" id="currencyInput" class="form-control mb-2" placeholder="Currency (default INR)" value="INR">
-    <label for="thresholdSlider" class="form-label">Threshold: <span id="thresholdValue">0.8</span></label>
-    <input type="range" class="form-range mb-3" min="0" max="1" step="0.01" value="0.8" id="thresholdSlider" 
-           oninput="document.getElementById('thresholdValue').innerText = this.value">
-    <button class="btn btn-warning mb-2" onclick="checkAnomaly()">Check Anomaly</button>
-    <div id="anomalyResult" class="mt-2"></div>
-    <h5 class="mt-3">📜 Anomaly Check History</h5>
-    <table class="table table-bordered table-sm table-hover" id="anomalyHistory">
-      <thead class="table-light">
-        <tr>
-          <th>Txn</th><th>Account</th><th>Amount</th><th>Hour</th>
-          <th>Merchant</th><th>Category</th><th>Location</th><th>Device</th>
-          <th>Channel</th><th>Threshold</th><th>Score</th><th>Status</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </div>
+    <!-- Row 1: Stock Price Forecasting & Sentiment -->
+    <div class="row">
+      <!-- Stock Price Forecasting -->
+      <div class="col-lg-8">
+        <div class="dashboard-card">
+          <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center">
+              <div class="card-icon-wrapper icon-forecast">
+                <i class="bi bi-graph-up-arrow"></i>
+              </div>
+              <div>
+                <h5 class="mb-0 fw-bold">Stock Price Forecasting</h5>
+                <small class="text-muted">Multi-signal Ensemble (Regular Trading Hours)</small>
+              </div>
+            </div>
+          </div>
 
-  <!-- Rebalance Section -->
-  <div class="card p-3 mb-4">
-    <h4>📈 Portfolio Rebalancing</h4>
-    <input type="text" id="tickersInput" class="form-control mb-2"
-      placeholder='Enter tickers as comma separated (e.g., AAPL,MSFT,TSLA)'>
-    <input type="number" step="0.1" id="riskInput" class="form-control mb-2" placeholder="Target risk (0 to 1)">
-    <button class="btn btn-primary mb-2" onclick="rebalance()">Rebalance Portfolio</button>
-    <div id="rebalanceResult" class="mt-2"></div>
-  </div>
+          <div class="row g-2 mb-3">
+            <div class="col-sm-9">
+              <div class="input-group">
+                <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                <input type="text" id="forecastTickersInput" class="form-control border-start-0 ps-0"
+                  placeholder="Enter tickers (e.g. AAPL, MSFT, TSLA)" value="AAPL">
+              </div>
+            </div>
+            <div class="col-sm-3">
+              <button class="btn btn-custom-primary w-100" onclick="forecastStocks()">
+                <i class="bi bi-lightning-charge-fill me-1"></i> Forecast
+              </button>
+            </div>
+          </div>
 
-  <!-- Forecast Section -->
-  <div class="card p-3 mb-4">
-    <h4>📉 Stock Price Forecasting (Next 10 Hours)</h4>
-    <input type="text" id="forecastTickersInput" class="form-control mb-2"
-      placeholder="Enter tickers (comma separated, e.g., AAPL,MSFT,TSLA)">
-    <button class="btn btn-dark mb-2" onclick="forecastStocks()">Forecast</button>
-    <canvas id="forecastChart" height="120"></canvas>
-    <div id="forecastTable" class="mt-3"></div>
-  </div>
+          <div class="chart-container-wrapper">
+            <canvas id="forecastChart"></canvas>
+          </div>
 
+          <div id="forecastTable" class="mt-4"></div>
+        </div>
+      </div>
+
+      <!-- News Sentiment Analysis -->
+      <div class="col-lg-4">
+        <div class="dashboard-card h-100">
+          <div class="d-flex align-items-center mb-3">
+            <div class="card-icon-wrapper icon-news">
+              <i class="bi bi-newspaper"></i>
+            </div>
+            <div>
+              <h5 class="mb-0 fw-bold">News Sentiment</h5>
+              <small class="text-muted">Real-time NLP Market Analysis</small>
+            </div>
+          </div>
+
+          <textarea id="sentimentInput" class="form-control mb-3" rows="4"
+            placeholder="Paste market headlines to analyze sentiment..."></textarea>
+
+          <div class="d-grid gap-2 mb-3">
+            <button class="btn btn-custom-primary" onclick="analyzeSentiment()">
+              <i class="bi bi-chat-square-text me-1"></i> Analyze Custom Text
+            </button>
+            <button class="btn btn-custom-secondary" onclick="fetchTodayNews()">
+              <i class="bi bi-cloud-arrow-down me-1"></i> Fetch Live News
+            </button>
+          </div>
+
+          <div id="sentimentResult" class="mt-3 overflow-auto" style="max-height: 280px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Anomaly Detection & Portfolio Rebalancing -->
+    <div class="row">
+      <!-- Anomaly Check -->
+      <div class="col-lg-7">
+        <div class="dashboard-card">
+          <div class="d-flex align-items-center mb-4">
+            <div class="card-icon-wrapper icon-anomaly">
+              <i class="bi bi-shield-check"></i>
+            </div>
+            <div>
+              <h5 class="mb-0 fw-bold">Fraud & Anomaly Detection</h5>
+              <small class="text-muted">Unsupervised Isolation Forest Engine</small>
+            </div>
+          </div>
+
+          <!-- Quick Sample Preset Buttons -->
+          <div class="d-flex gap-2 mb-3">
+            <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3" onclick="fillSampleAnomaly(false)">
+              <i class="bi bi-check-circle me-1"></i> Fill Normal Sample
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="fillSampleAnomaly(true)">
+              <i class="bi bi-exclamation-triangle me-1"></i> Fill Fraud/Anomaly Sample
+            </button>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Transaction ID</label>
+              <input type="text" id="txnInput" class="form-control" placeholder="e.g. TXN102">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Account ID</label>
+              <input type="text" id="accountInput" class="form-control" placeholder="e.g. 1001">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Amount</label>
+              <input type="number" id="amountInput" class="form-control" placeholder="e.g. 1250">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Time Picker (Hour)</label>
+              <input type="time" id="timePickerInput" class="form-control" value="14:30">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Merchant</label>
+              <input type="text" id="merchantInput" list="merchantList" class="form-control" placeholder="e.g. Amazon">
+              <datalist id="merchantList">
+                <option value="Amazon">
+                <option value="Starbucks">
+                <option value="Apple Store">
+                <option value="Jewelry Haven Paris">
+                <option value="Crypto Exchange">
+              </datalist>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Category</label>
+              <input type="text" id="categoryInput" list="categoryList" class="form-control" placeholder="e.g. Groceries">
+              <datalist id="categoryList">
+                <option value="Groceries">
+                <option value="Electronics">
+                <option value="Luxury / Jewelry">
+                <option value="Entertainment">
+                <option value="Wire Transfer">
+              </datalist>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Location</label>
+              <input type="text" id="locationInput" list="locationList" class="form-control" placeholder="e.g. Mumbai">
+              <datalist id="locationList">
+                <option value="Mumbai">
+                <option value="Delhi">
+                <option value="London">
+                <option value="Overseas-Unknown">
+              </datalist>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Device ID</label>
+              <input type="text" id="deviceInput" class="form-control" placeholder="e.g. dev1">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Channel</label>
+              <select id="channelInput" class="form-select">
+                <option value="card" selected>Card</option>
+                <option value="upi">UPI</option>
+                <option value="wire">Wire Transfer</option>
+                <option value="netbanking">Net Banking</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label text-muted small mb-1">Currency</label>
+              <select id="currencyInput" class="form-select">
+                <option value="INR" selected>INR (₹)</option>
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="bg-light p-3 rounded-3 border mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label for="thresholdSlider" class="form-label mb-0 fw-semibold text-secondary">Detection Sensitivity Threshold</label>
+              <span class="badge bg-white text-dark border px-2 py-1" id="thresholdValue">0.70</span>
+            </div>
+            <input type="range" class="form-range" min="0" max="1" step="0.01" value="0.70" id="thresholdSlider" 
+                   oninput="document.getElementById('thresholdValue').innerText = parseFloat(this.value).toFixed(2)">
+          </div>
+
+          <button class="btn btn-custom-primary mb-3" onclick="checkAnomaly()">
+            <i class="bi bi-shield-play me-1"></i> Check Transaction Anomaly
+          </button>
+
+          <div id="anomalyResult" class="mb-3"></div>
+
+          <h6 class="fw-bold mb-2 text-secondary"><i class="bi bi-clock-history me-1"></i> Audit History</h6>
+          <div class="table-responsive rounded-3 border">
+            <table class="table table-custom align-middle mb-0" id="anomalyHistory">
+              <thead>
+                <tr>
+                  <th>Txn</th><th>Account</th><th>Amount</th><th>Hour</th>
+                  <th>Merchant</th><th>Category</th><th>Score</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Portfolio Rebalancing -->
+      <div class="col-lg-5">
+        <div class="dashboard-card h-100">
+          <div class="d-flex align-items-center mb-4">
+            <div class="card-icon-wrapper icon-rebalance">
+              <i class="bi bi-pie-chart-fill"></i>
+            </div>
+            <div>
+              <h5 class="mb-0 fw-bold">Portfolio Rebalancing</h5>
+              <small class="text-muted">Mean-Variance Optimization Agent</small>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold text-secondary">Stock Tickers</label>
+            <input type="text" id="tickersInput" class="form-control"
+              placeholder="e.g. AAPL, MSFT, TSLA, NVDA" value="AAPL, MSFT, TSLA, NVDA">
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold text-secondary">Target Risk Scale (0.0 to 1.0)</label>
+            <input type="number" step="0.1" min="0" max="1" id="riskInput" class="form-control" placeholder="0.5" value="0.5">
+          </div>
+
+          <button class="btn btn-custom-primary w-100 mb-3" onclick="rebalance()">
+            <i class="bi bi-sliders me-1"></i> Calculate Optimal Allocation
+          </button>
+
+          <div id="rebalanceResult"></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Logic -->
   <script>
     const API_BASE = window.location.origin;
     let forecastChart = null;
@@ -93,16 +485,21 @@
         const res = await axios.get(`${API_BASE}/news-today`);
         const resultsDiv = document.getElementById("sentimentResult");
         const newsHtml = res.data.news.map(n =>
-          `<p><b>"${n.headline}"</b><br>
-          Sentiment: <span class="${n.sentiment.label === 'POSITIVE' ? 'text-success' : 'text-danger'}">
-          ${n.sentiment.label}</span> (Score: ${(n.sentiment.score*100).toFixed(2)}%)</p>`
+          `<div class="p-2 mb-2 rounded bg-light border-start border-3 ${n.sentiment.label === 'POSITIVE' ? 'border-success' : 'border-danger'}">
+            <p class="mb-1 fw-semibold text-dark" style="font-size: 0.875rem;">"${n.headline}"</p>
+            <small class="${n.sentiment.label === 'POSITIVE' ? 'text-success fw-bold' : 'text-danger fw-bold'}">
+              ${n.sentiment.label}
+            </small> 
+            <small class="text-muted ms-2">Confidence: ${(n.sentiment.score * 100).toFixed(1)}%</small>
+          </div>`
         ).join("");
-        let summaryHtml = "<h5>📌 Stock-wise Summary</h5><ul>";
+
+        let summaryHtml = "<div class='mt-3 p-2 bg-white rounded border'><h6 class='fw-bold mb-2 text-secondary' style='font-size:0.8rem;'>STOCK SUMMARY</h6><ul class='list-unstyled mb-0 style='font-size:0.85rem;'>";
         for (const [stock, stats] of Object.entries(res.data.summary || {})) {
-          const overall = stats.positive >= stats.negative ? "Positive 🚀" : "Negative 📉";
-          summaryHtml += `<li><b>${stock}</b>: ${stats.positive} Positive | ${stats.negative} Negative → ${overall}</li>`;
+          const isPos = stats.positive >= stats.negative;
+          summaryHtml += `<li class='d-flex justify-content-between py-1 border-bottom'><span class='fw-semibold'>${stock}</span><span class='${isPos ? 'text-success' : 'text-danger'}'>${isPos ? 'Positive 🚀' : 'Negative 📉'} (${stats.positive}P / ${stats.negative}N)</span></li>`;
         }
-        summaryHtml += "</ul>";
+        summaryHtml += "</ul></div>";
         resultsDiv.innerHTML = newsHtml + summaryHtml;
       } catch (err) {
         alert("Error fetching today's news: " + err);
@@ -112,44 +509,82 @@
     function renderSentimentResults(texts, results) {
       const resultsDiv = document.getElementById("sentimentResult");
       resultsDiv.innerHTML = results.map((r, i) =>
-        `<p><b>"${texts[i]}"</b><br>
-         Sentiment: <span class="${r.label === 'POSITIVE' ? 'text-success' : 'text-danger'}">${r.label}</span>
-         (Score: ${(r.score*100).toFixed(2)}%)</p>`
+        `<div class="p-2 mb-2 rounded bg-light border-start border-3 ${r.label === 'POSITIVE' ? 'border-success' : 'border-danger'}">
+           <p class="mb-1 fw-semibold text-dark" style="font-size: 0.875rem;">"${texts[i]}"</p>
+           <small class="${r.label === 'POSITIVE' ? 'text-success fw-bold' : 'text-danger fw-bold'}">${r.label}</small>
+           <small class="text-muted ms-2">Score: ${(r.score * 100).toFixed(1)}%</small>
+         </div>`
       ).join("");
+    }
+
+    function fillSampleAnomaly(isAnomaly) {
+      document.getElementById("txnInput").value = isAnomaly ? "TXN999" : "TXN102";
+      document.getElementById("accountInput").value = isAnomaly ? "4092" : "1001";
+      document.getElementById("amountInput").value = isAnomaly ? 250000 : 1250;
+      document.getElementById("timePickerInput").value = isAnomaly ? "03:15" : "14:30";
+      document.getElementById("merchantInput").value = isAnomaly ? "Jewelry Haven Paris" : "Amazon";
+      document.getElementById("categoryInput").value = isAnomaly ? "Luxury / Jewelry" : "Groceries";
+      document.getElementById("locationInput").value = isAnomaly ? "Overseas-Unknown" : "Mumbai";
+      document.getElementById("deviceInput").value = isAnomaly ? "dev_unrecognized" : "dev1";
+      document.getElementById("channelInput").value = isAnomaly ? "wire" : "card";
+      document.getElementById("currencyInput").value = isAnomaly ? "USD" : "INR";
     }
 
     async function checkAnomaly() {
       try {
-        const payload = {
-          txn_id: document.getElementById("txnInput").value || null,
-          account_id: document.getElementById("accountInput").value || null,
-          amount: parseFloat(document.getElementById("amountInput").value),
-          hour: parseInt(document.getElementById("hourInput").value),
-          merchant: document.getElementById("merchantInput").value || "UNKNOWN",
-          category: document.getElementById("categoryInput").value || "UNKNOWN",
-          location: document.getElementById("locationInput").value || "UNKNOWN",
-          device_id: document.getElementById("deviceInput").value || "UNKNOWN",
-          channel: document.getElementById("channelInput").value || "card",
-          currency: document.getElementById("currencyInput").value || "INR",
-          threshold: parseFloat(document.getElementById("thresholdSlider").value)
+        const getVal = (id, def = "") => {
+          const el = document.getElementById(id);
+          return el ? el.value : def;
         };
-        if (isNaN(payload.amount) || isNaN(payload.hour)) return alert("Please enter valid amount and hour.");
+
+        // Extract hour from time picker (HH:MM -> HH)
+        let hour = 12;
+        const timePickerVal = getVal("timePickerInput");
+        if (timePickerVal && timePickerVal.includes(":")) {
+          hour = parseInt(timePickerVal.split(":")[0], 10);
+        }
+
+        const payload = {
+          txn_id: getVal("txnInput") || null,
+          account_id: getVal("accountInput") || null,
+          amount: parseFloat(getVal("amountInput")),
+          hour: isNaN(hour) ? 12 : hour,
+          merchant: getVal("merchantInput") || "UNKNOWN",
+          category: getVal("categoryInput") || "UNKNOWN",
+          location: getVal("locationInput") || "UNKNOWN",
+          device_id: getVal("deviceInput") || "UNKNOWN",
+          channel: getVal("channelInput") || "card",
+          currency: getVal("currencyInput") || "INR",
+          threshold: parseFloat(getVal("thresholdSlider", "0.8"))
+        };
+        if (isNaN(payload.amount)) return alert("Please enter a valid transaction amount.");
         const res = await axios.post(`${API_BASE}/score`, payload);
         const { score, status } = res.data;
+        
+        const isAnomaly = status === 'Anomaly';
         document.getElementById("anomalyResult").innerHTML =
-          `<p>Anomaly Score: <b>${score.toFixed(4)}</b></p>
-           <p>Status: <span class="${status === 'Anomaly' ? 'text-danger fw-bold' : 'text-success fw-bold'}">
-             ${status === 'Anomaly' ? '🔴 Anomaly Detected' : '🟢 Normal'}</span></p>`;
+          `<div class="p-3 rounded-3 ${isAnomaly ? 'bg-danger-subtle border border-danger' : 'bg-success-subtle border border-success'}">
+             <div class="d-flex justify-content-between align-items-center">
+               <span class="fw-bold ${isAnomaly ? 'text-danger' : 'text-success'}">
+                 ${isAnomaly ? '🔴 Anomaly Flagged' : '🟢 Normal Transaction'}
+               </span>
+               <span class="badge ${isAnomaly ? 'bg-danger' : 'bg-success'}">Score: ${score.toFixed(4)}</span>
+             </div>
+           </div>`;
+
         const tbody = document.querySelector("#anomalyHistory tbody");
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${payload.txn_id || "-"}</td><td>${payload.account_id || "-"}</td><td>${payload.amount}</td>
-          <td>${payload.hour}</td><td>${payload.merchant}</td><td>${payload.category}</td>
-          <td>${payload.location}</td><td>${payload.device_id}</td><td>${payload.channel}</td>
-          <td>${payload.threshold}</td><td>${score.toFixed(4)}</td>
-          <td>${status === 'Anomaly' ? "🔴 Anomaly" : "🟢 Normal"}</td>
+          <td class="fw-semibold">${payload.txn_id || "-"}</td>
+          <td>${payload.account_id || "-"}</td>
+          <td class="fw-bold">${payload.currency} ${payload.amount.toLocaleString()}</td>
+          <td>${payload.hour}:00</td>
+          <td>${payload.merchant}</td>
+          <td>${payload.category}</td>
+          <td><code>${score.toFixed(4)}</code></td>
+          <td><span class="${isAnomaly ? 'badge-negative' : 'badge-positive'}">${isAnomaly ? 'Anomaly' : 'Normal'}</span></td>
         `;
-        tbody.appendChild(row);
+        tbody.prepend(row);
       } catch (err) {
         alert("Error: " + err);
       }
@@ -161,34 +596,49 @@
         const risk_target = parseFloat(document.getElementById("riskInput").value);
         if (tickers.length === 0 || isNaN(risk_target)) return alert("Please enter tickers and risk target.");
         const res = await axios.post(`${API_BASE}/rebalance`, { tickers, risk_target });
-        document.getElementById("rebalanceResult").innerHTML =
-          `<pre>${JSON.stringify(res.data, null, 2)}</pre>`;
+        
+        const weights = res.data.weights || {};
+        let weightsHtml = '<div class="p-3 bg-light rounded-3 border"><h6 class="fw-bold mb-3">Optimal Target Weights</h6>';
+        for (const [k, v] of Object.entries(weights)) {
+          const pct = (v * 100).toFixed(1);
+          weightsHtml += `
+            <div class="mb-2">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="fw-semibold">${k}</span>
+                <span class="fw-bold text-primary">${pct}%</span>
+              </div>
+              <div class="progress" style="height: 6px;">
+                <div class="progress-bar bg-primary" role="progressbar" style="width: ${pct}%"></div>
+              </div>
+            </div>`;
+        }
+        weightsHtml += `
+          <div class="d-flex justify-content-between mt-3 pt-2 border-top text-muted small">
+            <span>Expected Return: <b>${((res.data.expected_return || 0)*100).toFixed(1)}%</b></span>
+            <span>Est. Volatility: <b>${((res.data.volatility || 0)*100).toFixed(1)}%</b></span>
+          </div>
+        </div>`;
+        document.getElementById("rebalanceResult").innerHTML = weightsHtml;
       } catch (err) {
         alert("Error: " + err);
       }
     }
 
-    // ---------- Forecast logic (robust timestamp alignment) ----------
     function parseDateFlexible(s) {
-      // handle formats like "YYYY-MM-DD HH:MM" or "YYYY-MM-DDTHH:MM:SS" or "Aug 20, 2025 4:00:00 PM"
       if (!s) return null;
-      // If string looks like "YYYY-MM-DD HH:MM" convert to "YYYY-MM-DDTHH:MM:00"
       const isoLike = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/;
       if (isoLike.test(s)) {
         const withT = s.replace(' ', 'T');
         if (withT.length === 16) return new Date(withT + ':00');
         return new Date(withT);
       }
-      // try Date constructor as a fallback (handles "Aug 20, 2025 4:00:00 PM")
       const d = new Date(s);
       if (!isNaN(d.getTime())) return d;
-      // try adding seconds + T
       const s2 = s.replace(' ', 'T') + ':00';
       return new Date(s2);
     }
 
     function roundToMinuteKey(dateObj, minuteStep = 1) {
-      // returns epoch ms rounded down to the nearest minuteStep (e.g., 15)
       const ms = dateObj.getTime();
       const min = Math.floor(ms / 60000);
       const roundedMin = Math.floor(min / minuteStep) * minuteStep;
@@ -203,15 +653,13 @@
 
         const multi = {};
         const allKeys = new Set();
-        const minuteStep = 30; // backend uses 30-min intervals
+        const minuteStep = 30;
 
-        // fetch each ticker individually
         for (const ticker of tickers) {
           const res = await axios.get(`${API_BASE}/forecast/${ticker}`);
           const history = res.data.history || [];
           const forecast = res.data.forecast || [];
 
-          // build maps keyed by rounded epoch ms
           const histMap = {};
           for (const h of history) {
             const d = parseDateFlexible(h.time);
@@ -233,16 +681,14 @@
           multi[ticker.toUpperCase()] = { histMap, foreMap, rawHistory: history, rawForecast: forecast };
         }
 
-        // sort all keys ascending
         const keysArr = Array.from(allKeys).sort((a,b)=>a-b);
         const labelsDates = keysArr.map(k => new Date(k));
 
-        // Color pairs: [history color, forecast color]
         const colorPairs = [
-          ["#ff6384", "#00e5ff"],  // pink history → cyan forecast
-          ["#36a2eb", "#ffce56"],  // blue history → yellow forecast
-          ["#cc65fe", "#2ecc71"],  // purple history → green forecast
-          ["#e74c3c", "#1abc9c"],  // red history → teal forecast
+          ["#2563eb", "#10b981"],  // Blue history -> Emerald forecast
+          ["#9333ea", "#f59e0b"],  // Purple history -> Amber forecast
+          ["#0891b2", "#ec4899"],  // Cyan history -> Pink forecast
+          ["#d97706", "#6366f1"],  // Amber history -> Indigo forecast
         ];
 
         const datasets = [];
@@ -252,17 +698,13 @@
           const [histColor, foreColor] = colorPairs[pairIdx % colorPairs.length];
           pairIdx++;
 
-          // Find the last history key to bridge forecast to it
           const histKeys = Object.keys(maps.histMap).map(Number).sort((a,b)=>a-b);
           const lastHistKey = histKeys.length > 0 ? histKeys[histKeys.length - 1] : null;
           const lastHistPrice = lastHistKey !== null ? maps.histMap[lastHistKey] : null;
 
           const histArr = keysArr.map(k => (k in maps.histMap ? maps.histMap[k] : null));
-
-          // For forecast: include the last history point so the line connects
           const foreArr = keysArr.map(k => {
             if (k in maps.foreMap) return maps.foreMap[k];
-            // Bridge: if this is the last history key, include its price in forecast too
             if (lastHistKey !== null && k === lastHistKey) return lastHistPrice;
             return null;
           });
@@ -273,10 +715,10 @@
             borderColor: histColor,
             backgroundColor: histColor,
             fill: false,
-            tension: 0.15,
+            tension: 0.2,
             pointRadius: 1,
             spanGaps: false,
-            borderWidth: 2.5
+            borderWidth: 2
           });
 
           datasets.push({
@@ -284,16 +726,15 @@
             data: foreArr,
             borderColor: foreColor,
             backgroundColor: foreColor,
-            borderDash: [8, 4],
+            borderDash: [6, 4],
             fill: false,
-            tension: 0.25,
+            tension: 0.2,
             pointRadius: 2.5,
             spanGaps: false,
-            borderWidth: 2.5
+            borderWidth: 2
           });
         }
 
-        // draw chart
         const ctx = document.getElementById("forecastChart").getContext("2d");
         if (forecastChart) forecastChart.destroy();
         forecastChart = new Chart(ctx, {
@@ -304,31 +745,37 @@
             maintainAspectRatio: false,
             interaction: { mode: "index", intersect: false },
             plugins: {
-              legend: { position: "top", labels: { boxWidth: 14, padding: 8 } }
+              legend: { position: "top", labels: { boxWidth: 12, usePointStyle: true, font: { family: 'Plus Jakarta Sans', size: 12 } } }
             },
             scales: {
               x: {
                 type: "time",
+                grid: { color: '#f1f5f9' },
                 time: { tooltipFormat: "PPpp", displayFormats: { hour: 'MMM d, h a', minute: 'HH:mm' } },
-                ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+                ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { family: 'Plus Jakarta Sans', size: 11 } }
               },
-              y: { title: { display: true, text: "Price (USD)" }, beginAtZero: false }
-            },
-            elements: { point: { hoverRadius: 6 } }
+              y: {
+                grid: { color: '#f1f5f9' },
+                title: { display: true, text: "Price (USD)", font: { family: 'Plus Jakarta Sans', size: 12, weight: '600' } },
+                ticks: { font: { family: 'Plus Jakarta Sans', size: 11 } },
+                beginAtZero: false
+              }
+            }
           }
         });
 
-        // recreate readable forecast tables
         let tableHtml = "";
         for (const [ticker, maps] of Object.entries(multi)) {
           const rawForecast = maps.rawForecast || [];
-          tableHtml += `<h5 class="mt-3">${ticker} Forecast</h5>
-            <table class="table table-sm table-bordered">
-              <thead><tr><th>Time</th><th>Predicted Price</th></tr></thead>
-              <tbody>
-                ${rawForecast.map(f => `<tr><td>${f.time}</td><td>${Number(f.price).toFixed(2)}</td></tr>`).join("")}
-              </tbody>
-            </table>`;
+          tableHtml += `<div class="mt-3"><h6 class="fw-bold mb-2 text-secondary">${ticker} Forecast Table</h6>
+            <div class="table-responsive rounded-3 border" style="max-height: 200px;">
+              <table class="table table-custom mb-0">
+                <thead><tr><th>Time</th><th>Predicted Price</th></tr></thead>
+                <tbody>
+                  ${rawForecast.map(f => `<tr><td>${f.time}</td><td class="fw-semibold text-primary">$${Number(f.price).toFixed(2)}</td></tr>`).join("")}
+                </tbody>
+              </table>
+            </div></div>`;
         }
         document.getElementById("forecastTable").innerHTML = tableHtml;
 
@@ -337,8 +784,6 @@
         alert("Error fetching forecast: " + (err.response ? JSON.stringify(err.response.data) : err.message));
       }
     }
-
-
   </script>
 </body>
 </html>
